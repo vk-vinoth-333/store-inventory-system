@@ -28,15 +28,21 @@ class CustomerController extends Controller
                 ->withCount('orders')
                 ->withSum('orders as total_billed', 'grand_total')
                 ->withSum('orders as total_counter_paid', 'amount_given')
-                ->withSum(['payments as total_manual_paid' => function ($q) {
+                ->withSum(['payments as total_due_payments' => function ($q) {
                     $q->where('type', 'due_payment');
+                }], 'amount')
+                ->withSum(['payments as total_credits' => function ($q) {
+                    $q->where('type', 'credit');
+                }], 'amount')
+                ->withSum(['payments as total_refunds' => function ($q) {
+                    $q->where('type', 'refund');
                 }], 'amount');
 
             if (!empty($filters['search'])) {
                 $s = $filters['search'];
                 $query->where(function ($q) use ($s) {
                     $q->where('name', 'like', "%{$s}%")
-                        ->orWhere('email', 'like', "%{$s}%");
+                    ->orWhere('email', 'like', "%{$s}%");
                 });
             }
 
@@ -45,8 +51,15 @@ class CustomerController extends Controller
             $customers->getCollection()->transform(function ($c) {
                 $billed = (float) ($c->total_billed ?? 0);
                 $counterPaid = (float) ($c->total_counter_paid ?? 0);
-                $manualPaid = (float) ($c->total_manual_paid ?? 0);
-                $c->computed_balance = round($billed - $counterPaid - $manualPaid, 2);
+                $duePaid = (float) ($c->total_due_payments ?? 0);
+                $credits = (float) ($c->total_credits ?? 0);
+                $refunds = (float) ($c->total_refunds ?? 0);
+
+                $c->computed_balance = round(
+                    $billed - $counterPaid - $duePaid - $credits + $refunds,
+                    2
+                );
+                $c->total_manual_paid = $duePaid + $credits - $refunds;
                 return $c;
             });
 
@@ -65,8 +78,14 @@ class CustomerController extends Controller
 
             $allCustomers = Customer::withSum('orders as total_billed', 'grand_total')
                 ->withSum('orders as total_counter_paid', 'amount_given')
-                ->withSum(['payments as total_manual_paid' => function ($q) {
+                ->withSum(['payments as total_due_payments' => function ($q) {
                     $q->where('type', 'due_payment');
+                }], 'amount')
+                ->withSum(['payments as total_credits' => function ($q) {
+                    $q->where('type', 'credit');
+                }], 'amount')
+                ->withSum(['payments as total_refunds' => function ($q) {
+                    $q->where('type', 'refund');
                 }], 'amount')
                 ->get();
 
@@ -81,8 +100,10 @@ class CustomerController extends Controller
             foreach ($allCustomers as $c) {
                 $b = round(
                     (float) ($c->total_billed ?? 0)
-                        - (float) ($c->total_counter_paid ?? 0)
-                        - (float) ($c->total_manual_paid ?? 0),
+                    - (float) ($c->total_counter_paid ?? 0)
+                    - (float) ($c->total_due_payments ?? 0)
+                    - (float) ($c->total_credits ?? 0)
+                    + (float) ($c->total_refunds ?? 0),
                     2
                 );
                 if ($b > 0) {
@@ -95,6 +116,7 @@ class CustomerController extends Controller
             }
 
             return view('customers.index', compact('customers', 'stats'));
+
         } catch (Throwable $e) {
             Log::error('Failed to load customers list', [
                 'error' => $e->getMessage(),

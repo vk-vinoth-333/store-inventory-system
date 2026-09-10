@@ -94,8 +94,15 @@
                         @php
                             $billed = (float) ($customer->total_billed ?? 0);
                             $counterPaid = (float) ($customer->total_counter_paid ?? 0);
-                            $manualPaid = (float) ($customer->total_manual_paid ?? 0);
-                            $balance = $customer->computed_balance ?? round($billed - $counterPaid - $manualPaid, 2);
+                            $duePaid = (float) ($customer->total_due_payments ?? 0);
+                            $credits = (float) ($customer->total_credits ?? 0);
+                            $refunds = (float) ($customer->total_refunds ?? 0);
+
+                            $balance =
+                                $customer->computed_balance ??
+                                round($billed - $counterPaid - $duePaid - $credits + $refunds, 2);
+
+                            $netManual = $duePaid + $credits - $refunds;
                         @endphp
                         <tr class="border-t hover:bg-slate-50">
                             <td class="px-4 py-3">
@@ -110,7 +117,18 @@
                             </td>
                             <td class="px-4 py-3 text-right text-slate-700">₹{{ number_format($billed, 2) }}</td>
                             <td class="px-4 py-3 text-right text-slate-700">₹{{ number_format($counterPaid, 2) }}</td>
-                            <td class="px-4 py-3 text-right text-slate-700">₹{{ number_format($manualPaid, 2) }}</td>
+
+                            <td class="px-4 py-3 text-right text-slate-700">
+                                ₹{{ number_format($netManual, 2) }}
+                                @if ($refunds > 0)
+                                    <div class="text-[10px] text-amber-600">-₹{{ number_format($refunds, 2) }} refund</div>
+                                @endif
+                                @if ($credits > 0)
+                                    <div class="text-[10px] text-emerald-600">+₹{{ number_format($credits, 2) }} credit
+                                    </div>
+                                @endif
+                            </td>
+
                             <td class="px-4 py-3 text-right">
                                 @if ($balance > 0)
                                     <span class="font-bold text-rose-600">
@@ -132,26 +150,19 @@
                                 <div class="flex items-center justify-center gap-1.5">
                                     <button type="button"
                                         class="btn-view-customer text-xs text-slate-600 hover:text-slate-800 font-medium"
-                                        data-id="{{ $customer->id }}">
-                                        View
-                                    </button>
+                                        data-id="{{ $customer->id }}">View</button>
                                     <button type="button"
                                         class="btn-edit-customer text-xs text-blue-600 hover:text-blue-800 font-medium"
-                                        data-id="{{ $customer->id }}">
-                                        Edit
-                                    </button>
+                                        data-id="{{ $customer->id }}">Edit</button>
                                     <button type="button"
                                         class="pay-btn text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded"
                                         data-customer-id="{{ $customer->id }}" data-customer-name="{{ $customer->name }}"
                                         data-customer-email="{{ $customer->email }}" data-balance="{{ $balance }}"
-                                        data-billed="{{ $billed }}" data-paid="{{ $counterPaid + $manualPaid }}">
-                                        💰 Pay
-                                    </button>
+                                        data-billed="{{ $billed }}" data-paid="{{ $counterPaid + $netManual }}">💰
+                                        Pay</button>
                                     <button type="button"
                                         class="btn-delete-customer text-xs text-rose-600 hover:text-rose-800 font-medium"
-                                        data-id="{{ $customer->id }}" data-name="{{ $customer->name }}">
-                                        Delete
-                                    </button>
+                                        data-id="{{ $customer->id }}" data-name="{{ $customer->name }}">Delete</button>
                                 </div>
                             </td>
                         </tr>

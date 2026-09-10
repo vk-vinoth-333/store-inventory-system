@@ -40,11 +40,13 @@ class Customer extends Model
         return (float) $this->orders()->sum('amount_given');
     }
 
-    public function getTotalManualPaymentsAttribute(): float
+    public function getNetManualPaymentsAttribute(): float
     {
-        return (float) $this->payments()
-            ->where('type', 'due_payment')
-            ->sum('amount');
+        $duePaid = (float) $this->payments()->where('type', 'due_payment')->sum('amount');
+        $credits = (float) $this->payments()->where('type', 'credit')->sum('amount');
+        $refunds = (float) $this->payments()->where('type', 'refund')->sum('amount');
+
+        return $duePaid + $credits - $refunds;
     }
 
     public function getTotalPaidAttribute(): float
